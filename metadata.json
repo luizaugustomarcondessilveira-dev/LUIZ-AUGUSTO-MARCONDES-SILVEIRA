@@ -1,0 +1,8 @@
+{
+  "name": "Rotinas da Família",
+  "description": "Central de Auditoria & Dashboard dos Pais para supervisão de rotinas familiares, aprovação de tarefas e gestão de recompensas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
