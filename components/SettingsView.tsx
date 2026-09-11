@@ -43,11 +43,9 @@ export default function SettingsView({
   currentUser,
   onOpenAuthModal,
   onLogout,
-}: SettingsViewProps) {
-  onLogout,
   onLogoutToLogin,
 }: SettingsViewProps) {
-  const [pin, setPin] = useState(currentPin);
+   const [pin, setPin] = useState(currentPin);
   const [delayTolerance, setDelayTolerance] = useState('15');
   const [defaultPenalty, setDefaultPenalty] = useState('10');
   const [allowPhotoSkip, setAllowPhotoSkip] = useState(false);
