@@ -189,6 +189,22 @@ export function mapDbToReward(row: DbRewardItem): RewardItem {
   };
 }
 
+export function mapRewardToDb(reward: RewardItem): DbRewardItem {
+  return {
+    id: reward.id,
+    title: reward.title,
+    description: reward.description || '',
+    cost: reward.cost,
+    category: 'Geral',
+    icon: reward.icon || 'redeem',
+    available: reward.status !== 'delivered',
+    child_id: reward.childId,
+    status: reward.status,
+    requested_at: reward.requestedAt,
+    delivered_at: reward.deliveredAt,
+  };
+}
+
 export function mapDbToNotification(row: DbNotification): NotificationItem {
   return {
     id: row.id,
@@ -294,3 +310,341 @@ export async function syncUpdateChildBalance(
     return false;
   }
 }
+
+export async function syncUpdateFamilyMemberName(id: string, newName: string) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client
+      .from('family_members')
+      .update({ name: newName, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+
+    // Update child_name in routine_tasks if applicable
+    await client
+      .from('routine_tasks')
+      .update({ child_name: newName, updated_at: new Date().toISOString() })
+      .eq('child_id', id);
+
+    return true;
+  } catch (e) {
+    console.error('Failed to update family member name in Supabase:', e);
+    return false;
+  }
+}
+
+export async function syncDeleteTask(taskId: string) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('routine_tasks').delete().eq('id', taskId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('Failed to delete task from Supabase:', e);
+    return false;
+  }
+}
+
+export async function syncUpsertReward(reward: RewardItem) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const dbReward = mapRewardToDb(reward);
+    const { error } = await client.from('reward_items').upsert(dbReward);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('Failed to upsert reward to Supabase:', e);
+    return false;
+  }
+}
+
+export async function syncDeleteReward(rewardId: string) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('reward_items').delete().eq('id', rewardId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('Failed to delete reward from Supabase:', e);
+    return false;
+  }
+}
+
+export async function syncUpsertFamilyMember(
+  member: {
+    id: string;
+    name: string;
+    role: string;
+    avatarUrl?: string;
+    balance?: number;
+    accumulated?: number;
+    spent?: number;
+    stars?: number;
+    streakDays?: number;
+  }
+) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const payload: Partial<DbFamilyMember> = {
+      id: member.id,
+      name: member.name,
+      role: member.role || 'child',
+      avatar_url: member.avatarUrl,
+      updated_at: new Date().toISOString(),
+    };
+    if (member.balance !== undefined) payload.balance = member.balance;
+    if (member.accumulated !== undefined) payload.accumulated = member.accumulated;
+    if (member.spent !== undefined) payload.spent = member.spent;
+    if (member.stars !== undefined) payload.stars = member.stars;
+    if (member.streakDays !== undefined) payload.streak_days = member.streakDays;
+
+    const { error } = await client.from('family_members').upsert(payload);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('Failed to upsert family member to Supabase:', e);
+    return false;
+  }
+}
+
+export async function syncDeleteFamilyMember(memberId: string) {
+  const client = getSupabase();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('family_members').delete().eq('id', memberId);
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.error('Failed to delete family member from Supabase:', e);
+    return false;
+  }
+}
+
+export function subscribeToSupabaseRealtime(onDataChanged: () => void) {
+  const client = getSupabase();
+  if (!client) return () => {};
+
+  try {
+    const channel = client
+      .channel('family-realtime-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'routine_tasks' },
+        () => {
+          onDataChanged();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reward_items' },
+        () => {
+          onDataChanged();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'family_members' },
+        () => {
+          onDataChanged();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        () => {
+          onDataChanged();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.error('Realtime subscription error:', err);
+    return () => {};
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Supabase Authentication Methods
+// ---------------------------------------------------------------------------
+
+export async function signUpWithSupabase(
+  email: string,
+  password: string,
+  metadata: { name: string; role: string; childId?: string }
+) {
+  const client = getSupabase();
+  if (!client) {
+    return {
+      data: {
+        user: {
+          id: `demo-${Date.now()}`,
+          email,
+          user_metadata: metadata,
+        },
+      },
+      error: null,
+      isDemo: true,
+    };
+  }
+
+  try {
+    const { data, error } = await client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: metadata,
+      },
+    });
+    return { data, error, isDemo: false };
+  } catch (err: any) {
+    return { data: null, error: err, isDemo: false };
+  }
+}
+
+export async function signInWithSupabase(email: string, password: string) {
+  const client = getSupabase();
+  if (!client) {
+    return {
+      data: {
+        user: {
+          id: `demo-${email.split('@')[0]}`,
+          email,
+          user_metadata: {
+            name: email.split('@')[0].toUpperCase(),
+            role: 'parent',
+          },
+        },
+      },
+      error: null,
+      isDemo: true,
+    };
+  }
+
+  try {
+    const { data, error } = await client.auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { data, error, isDemo: false };
+  } catch (err: any) {
+    return { data: null, error: err, isDemo: false };
+  }
+}
+
+export async function signOutSupabase() {
+  const client = getSupabase();
+  if (!client) return { error: null };
+  try {
+    const { error } = await client.auth.signOut();
+    return { error };
+  } catch (err: any) {
+    return { error: err };
+  }
+}
+
+export async function getSupabaseSessionUser() {
+  const client = getSupabase();
+  if (!client) return null;
+  try {
+    const { data } = await client.auth.getUser();
+    return data?.user || null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Supabase Storage Photo Upload
+// ---------------------------------------------------------------------------
+
+export async function uploadProfilePhoto(file: File, pathPrefix: string = 'avatar'): Promise<string | null> {
+  const client = getSupabase();
+
+  // Helper for data URL fallback
+  const getBase64Fallback = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  if (!client) {
+    return getBase64Fallback();
+  }
+
+  try {
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const filePath = `avatars/${pathPrefix}-${Date.now()}.${fileExt}`;
+    
+    const { error: uploadError } = await client.storage
+      .from('family-avatars')
+      .upload(filePath, file, {
+        upsert: true,
+        contentType: file.type,
+      });
+
+    if (uploadError) {
+      console.warn('Storage bucket upload failed or bucket does not exist, using base64 fallback:', uploadError.message);
+      return getBase64Fallback();
+    }
+
+    const { data } = client.storage.from('family-avatars').getPublicUrl(filePath);
+    return data?.publicUrl || (await getBase64Fallback());
+  } catch (err) {
+    console.warn('Error during photo upload, using fallback:', err);
+    return getBase64Fallback();
+  }
+}
+
+export async function syncSaveFamilyProfile(profile: {
+  familyName?: string;
+  fatherName?: string;
+  motherName?: string;
+  fatherAvatar?: string;
+  motherAvatar?: string;
+  email?: string;
+}) {
+  const client = getSupabase();
+  if (!client) return false;
+
+  try {
+    const rowsToUpsert = [];
+    if (profile.fatherName) {
+      rowsToUpsert.push({
+        id: 'pai',
+        name: profile.fatherName,
+        role: 'parent',
+        avatar_url: profile.fatherAvatar,
+        updated_at: new Date().toISOString(),
+      });
+    }
+    if (profile.motherName) {
+      rowsToUpsert.push({
+        id: 'mae',
+        name: profile.motherName,
+        role: 'parent',
+        avatar_url: profile.motherAvatar,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    if (rowsToUpsert.length > 0) {
+      await client.from('family_members').upsert(rowsToUpsert);
+    }
+    return true;
+  } catch (e) {
+    console.error('Failed to sync family profile to Supabase:', e);
+    return false;
+  }
+}
+

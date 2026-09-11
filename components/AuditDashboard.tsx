@@ -16,6 +16,8 @@ interface AuditDashboardProps {
   onRequestPhoto: (task: RoutineTask) => void;
   onShowToast: (title: string, desc: string, iconName?: string) => void;
   onOpenPinChangeModal: () => void;
+  onEditTask?: (task: RoutineTask) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 export default function AuditDashboard({
@@ -31,6 +33,8 @@ export default function AuditDashboard({
   onRequestPhoto,
   onShowToast,
   onOpenPinChangeModal,
+  onEditTask,
+  onDeleteTask,
 }: AuditDashboardProps) {
   const [activeTab, setActiveTab] = useState<TaskStatus>('pending');
   const [feedbackValues, setFeedbackValues] = useState<Record<string, string>>({
@@ -538,7 +542,7 @@ export default function AuditDashboard({
                       </div>
                     </div>
 
-                    {/* Reward Points Tag */}
+                    {/* Reward Points Tag & Quick Actions */}
                     <div className="flex items-center gap-1.5">
                       {!task.onTime && task.penaltyAmount > 0 && isPenaltyActive && (
                         <span className="text-xs line-through text-on-surface-variant/70 font-semibold">
@@ -562,6 +566,32 @@ export default function AuditDashboard({
                         </span>
                         <span>+{pointsToAward} pts</span>
                       </div>
+
+                      {onEditTask && (
+                        <button
+                          type="button"
+                          onClick={() => onEditTask(task)}
+                          className="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
+                          title="Editar atividade"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                      )}
+
+                      {onDeleteTask && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Excluir a tarefa "${task.title}"?`)) {
+                              onDeleteTask(task.id);
+                            }
+                          }}
+                          className="p-1 rounded-lg text-on-surface-variant hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                          title="Excluir atividade"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 

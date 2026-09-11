@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { LOGO_URL } from '@/lib/initial-data';
+import { FamilyAuthUser } from '@/lib/types';
 
 interface SidebarProps {
   currentView: string;
@@ -11,6 +12,9 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   pendingCount?: number;
+  currentUser?: FamilyAuthUser | null;
+  onOpenAuthModal?: () => void;
+  familyName?: string;
 }
 
 export const NAV_ITEMS = [
@@ -30,6 +34,9 @@ export default function Sidebar({
   isOpenMobile,
   onCloseMobile,
   pendingCount = 4,
+  currentUser,
+  onOpenAuthModal,
+  familyName = 'Família Silva',
 }: SidebarProps) {
   return (
     <>
@@ -126,8 +133,49 @@ export default function Sidebar({
           </div>
         </div>
 
+        {/* Member Account & Auth Box */}
+        <div className="mx-3 mb-2 p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+          {currentUser ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary dark:text-primary-fixed flex items-center justify-center font-bold text-xs shrink-0">
+                  {currentUser.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-on-surface truncate">{currentUser.name}</div>
+                  <div className="text-[10px] text-on-surface-variant truncate">
+                    {currentUser.role === 'parent'
+                      ? 'Pai / Admin'
+                      : currentUser.role === 'co_parent'
+                      ? 'Mãe / Co-Admin'
+                      : 'Filho / Membro'}
+                  </div>
+                </div>
+              </div>
+
+              {onOpenAuthModal && (
+                <button
+                  onClick={onOpenAuthModal}
+                  className="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer"
+                  title="Gerenciar Conta"
+                >
+                  <span className="material-symbols-outlined text-[18px]">manage_accounts</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuthModal}
+              className="w-full py-1.5 px-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-primary text-[16px]">vpn_key</span>
+              <span>Entrar / Cadastrar</span>
+            </button>
+          )}
+        </div>
+
         {/* Footer Status & PIN Security Toggle */}
-        <div className="p-4 flex flex-col gap-2 bg-surface-container-lowest mx-3 mb-4 rounded-xl border border-outline-variant/30 shadow-2xs">
+        <div className="p-3.5 flex flex-col gap-2 bg-surface-container-lowest mx-3 mb-4 rounded-xl border border-outline-variant/30 shadow-2xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[#00a673] animate-pulse"></span>
@@ -150,7 +198,7 @@ export default function Sidebar({
             </button>
           </div>
           <div className="text-[11px] text-on-surface-variant">
-            Nuvem em tempo real • Família Silva
+            Nuvem em tempo real • {familyName}
           </div>
         </div>
       </aside>

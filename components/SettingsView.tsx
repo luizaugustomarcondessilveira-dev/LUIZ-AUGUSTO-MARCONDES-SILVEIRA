@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { Child, ParentProfile, FamilyAuthUser } from '@/lib/types';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -12,6 +13,13 @@ interface SettingsViewProps {
   onShowToast: (title: string, desc: string, icon?: string) => void;
   themeMode?: ThemeMode;
   onThemeChange?: (newTheme: ThemeMode) => void;
+  parentProfile?: ParentProfile;
+  onUpdateParentProfile?: (profile: ParentProfile) => void;
+  childrenData?: Child[];
+  onUpdateChildName?: (childId: string, newName: string) => void;
+  currentUser?: FamilyAuthUser | null;
+  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export default function SettingsView({
@@ -21,6 +29,19 @@ export default function SettingsView({
   onShowToast,
   themeMode = 'light',
   onThemeChange,
+  parentProfile = {
+    fatherName: 'Pai Admin',
+    motherName: 'Mãe Admin',
+    familyName: 'Família Silva',
+    email: 'luizaugustomarcondessilveira@gmail.com',
+    role: 'Administrador Chefe',
+  },
+  onUpdateParentProfile,
+  childrenData = [],
+  onUpdateChildName,
+  currentUser,
+  onOpenAuthModal,
+  onLogout,
 }: SettingsViewProps) {
   const [pin, setPin] = useState(currentPin);
   const [delayTolerance, setDelayTolerance] = useState('15');
@@ -29,6 +50,25 @@ export default function SettingsView({
   const [autoApproveOnTime, setAutoApproveOnTime] = useState(false);
   const [showDbDetails, setShowDbDetails] = useState(false);
 
+  // Profile Edit State
+  const [fatherName, setFatherName] = useState(parentProfile.fatherName || 'Pai Admin');
+  const [motherName, setMotherName] = useState(parentProfile.motherName || 'Mãe Admin');
+  const [familyName, setFamilyName] = useState(parentProfile.familyName || 'Família Silva');
+  const [childrenNames, setChildrenNames] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    childrenData.forEach((c) => {
+      initial[c.id] = c.name;
+    });
+    return initial;
+  });
+
+  const handleChildNameChange = (childId: string, value: string) => {
+    setChildrenNames((prev) => ({
+      ...prev,
+      [childId]: value,
+    }));
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (pin.length !== 4 || !/^\d+$/.test(pin)) {
@@ -36,7 +76,31 @@ export default function SettingsView({
       return;
     }
     onUpdatePin(pin);
-    onShowToast('Configurações Salvas!', 'As regras familiares foram atualizadas com sucesso.', 'verified');
+
+    // Save parent profile changes
+    if (onUpdateParentProfile) {
+      onUpdateParentProfile({
+        ...parentProfile,
+        fatherName: fatherName.trim() || 'Pai Admin',
+        motherName: motherName.trim() || 'Mãe Admin',
+        familyName: familyName.trim() || 'Família Silva',
+      });
+    }
+
+    // Save children names
+    if (onUpdateChildName) {
+      Object.entries(childrenNames).forEach(([childId, name]) => {
+        if (name.trim()) {
+          onUpdateChildName(childId, name.trim());
+        }
+      });
+    }
+
+    onShowToast(
+      'Configurações Salvas!',
+      'Nomes dos pais, dos filhos e regras familiares foram atualizados com sucesso.',
+      'verified'
+    );
   };
 
   return (
@@ -48,15 +112,262 @@ export default function SettingsView({
             settings
           </span>
           <h1 className="text-xl sm:text-2xl font-bold text-on-surface">
-            Configurações do Sistema Familiar
+            Configurações & Perfis da Família
           </h1>
         </div>
         <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-          Gerencie temas visuais (claro/escuro), regras de auditoria, limites de tolerância e segurança por PIN.
+          Edição de nomes dos pais e dos filhos, contas com Supabase Auth, regras de auditoria e segurança por PIN.
         </p>
       </div>
 
       <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* =================================================================== */}
+        {/* 1. EDIÇÃO DE PERFIL FAMILIAR (PAIS & FILHOS) */}
+        {/* =================================================================== */}
+        <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs border border-outline-variant/30 space-y-5 md:col-span-2">
+          <div className="flex items-center justify-between border-b border-outline-variant/20 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-primary/10 text-primary dark:text-primary-fixed material-symbols-outlined text-[22px]">
+                manage_accounts
+              </span>
+              <div>
+                <h2 className="font-bold text-base text-on-surface">
+                  Edição de Perfil Familiar (Nomes dos Pais e Filhos)
+                </h2>
+                <p className="text-xs text-on-surface-variant">
+                  Personalize os nomes de exibição dos pais e de cada filho em todas as telas do sistema.
+                </p>
+              </div>
+            </div>
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
+              Sincronização em Tempo Real
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Nome do Pai */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 space-y-2">
+              <label className="block text-xs font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-[18px]">person</span>
+                <span>Nome do Pai / Administrador</span>
+              </label>
+              <input
+                type="text"
+                value={fatherName}
+                onChange={(e) => setFatherName(e.target.value)}
+                placeholder="ex: Carlos Silva"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-surface-container-lowest text-sm font-semibold text-on-surface border border-outline-variant/40 focus:border-primary outline-none transition-colors"
+              />
+              <span className="text-[11px] text-on-surface-variant block">
+                Exibido no cabeçalho e na auditoria
+              </span>
+            </div>
+
+            {/* Nome da Mãe */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 space-y-2">
+              <label className="block text-xs font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-purple-600 text-[18px]">person_outline</span>
+                <span>Nome da Mãe / Co-Admin</span>
+              </label>
+              <input
+                type="text"
+                value={motherName}
+                onChange={(e) => setMotherName(e.target.value)}
+                placeholder="ex: Mariana Silva"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-surface-container-lowest text-sm font-semibold text-on-surface border border-outline-variant/40 focus:border-primary outline-none transition-colors"
+              />
+              <span className="text-[11px] text-on-surface-variant block">
+                Exibido no card de administradores
+              </span>
+            </div>
+
+            {/* Nome do Grupo Familiar */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 space-y-2">
+              <label className="block text-xs font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-amber-600 text-[18px]">family_restroom</span>
+                <span>Sobrenome / Grupo Familiar</span>
+              </label>
+              <input
+                type="text"
+                value={familyName}
+                onChange={(e) => setFamilyName(e.target.value)}
+                placeholder="ex: Família Silva"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-surface-container-lowest text-sm font-semibold text-on-surface border border-outline-variant/40 focus:border-primary outline-none transition-colors"
+              />
+              <span className="text-[11px] text-on-surface-variant block">
+                Identificador do seletor superior
+              </span>
+            </div>
+          </div>
+
+          {/* Seção dos Filhos */}
+          <div className="pt-2">
+            <h3 className="text-xs font-bold text-on-surface uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-500 text-[18px]">child_care</span>
+              <span>Nomes dos Filhos Cadastrados</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {childrenData.map((child) => (
+                <div
+                  key={child.id}
+                  className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 flex flex-col gap-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={child.avatar}
+                      alt={child.name}
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-bold uppercase text-on-surface-variant">
+                        Perfil do Filho: {child.id}
+                      </span>
+                      <div className="text-xs font-bold text-on-surface truncate">
+                        {child.age} • Saldo: {child.balance} pts
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-on-surface mb-1">
+                      Nome de Exibição:
+                    </label>
+                    <input
+                      type="text"
+                      value={childrenNames[child.id] ?? child.name}
+                      onChange={(e) => handleChildNameChange(child.id, e.target.value)}
+                      placeholder={`Nome de ${child.name}`}
+                      className="w-full px-3 py-2 rounded-lg bg-surface-container-lowest text-sm font-bold text-on-surface border border-outline-variant/40 focus:border-primary outline-none transition-colors"
+                    />
+                  </div>
+                  <span className="text-[10px] text-on-surface-variant">
+                    Atualiza automaticamente tarefas, carteira e loja deste filho.
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* =================================================================== */}
+        {/* 2. CADASTRO & LOGIN DOS MEMBROS (SUPABASE AUTH) */}
+        {/* =================================================================== */}
+        <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs border border-outline-variant/30 space-y-4 md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-outline-variant/20 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[24px]">vpn_key</span>
+              </div>
+              <div>
+                <h2 className="font-bold text-base text-on-surface flex items-center gap-2">
+                  <span>Autenticação & Contas dos Membros (Supabase Auth)</span>
+                  {isSupabaseConfigured ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                      Supabase Conectado
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
+                      Modo Local / Demo Ativo
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Cada membro da família (pais e filhos) pode ter sua conta com email e senha no Supabase.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenAuthModal}
+              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs shadow-2xs transition-all active:scale-95 flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
+              <span>Abrir Cadastro & Login</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            {/* Conta Atual */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 space-y-2 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-on-surface uppercase tracking-wider">
+                  Status da Sessão Atual
+                </span>
+                {currentUser && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:text-primary-fixed">
+                    {currentUser.role === 'parent'
+                      ? 'Pai / Admin'
+                      : currentUser.role === 'co_parent'
+                      ? 'Mãe / Co-Admin'
+                      : 'Filho / Membro'}
+                  </span>
+                )}
+              </div>
+
+              {currentUser ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-sm">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm text-on-surface">{currentUser.name}</div>
+                      <div className="text-xs text-on-surface-variant">{currentUser.email}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onOpenAuthModal}
+                      className="px-3 py-1.5 rounded-lg bg-surface-container-highest hover:bg-surface-container text-on-surface text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Trocar Conta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onLogout}
+                      className="px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      Sair
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between pt-1">
+                  <div className="text-xs text-on-surface-variant">
+                    Nenhum membro autenticado no momento (usando modo visitante).
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenAuthModal}
+                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Fazer Login Agora</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Guia Supabase */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/30 space-y-1.5 text-xs text-on-surface-variant">
+              <div className="font-bold text-on-surface flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-emerald-700 dark:text-emerald-400 text-[18px]">
+                  security
+                </span>
+                <span>Contas Familiares</span>
+              </div>
+              <p className="leading-relaxed text-[11px]">
+                Os pais têm acesso total às aprovações e trocas de PIN; os filhos acessam suas rotinas e solicitam recompensas.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Appearance & Theme Toggle Card */}
         <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-xs border border-outline-variant/30 space-y-4 md:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -349,7 +660,7 @@ export default function SettingsView({
             type="submit"
             className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
           >
-            Salvar Alterações
+            Salvar Todas as Alterações
           </button>
         </div>
       </form>

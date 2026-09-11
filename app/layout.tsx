@@ -2,17 +2,17 @@ import type {Metadata} from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Rotinas da Família - Central de Auditoria & Dashboard dos Pais',
-  description: 'Supervisione o cumprimento das rotinas diárias, audite tarefas pendentes e gerencie o saldo de recompensas da família.',
+  title: 'Rotinas da Família',
+  description: 'Central de Auditoria & Dashboard dos Pais para supervisão de rotinas familiares, aprovação de tarefas e gestão de recompensas.',
   openGraph: {
-    title: 'Rotinas da Família - Central de Auditoria & Dashboard dos Pais',
-    description: 'Supervisione o cumprimento das rotinas diárias, audite tarefas pendentes e gerencie o saldo de recompensas da família.',
+    title: 'Rotinas da Família',
+    description: 'Central de Auditoria & Dashboard dos Pais para supervisão de rotinas familiares, aprovação de tarefas e gestão de recompensas.',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Rotinas da Família - Central de Auditoria & Dashboard dos Pais',
-    description: 'Supervisione o cumprimento das rotinas diárias, audite tarefas pendentes e gerencie o saldo de recompensas da família.',
+    title: 'Rotinas da Família',
+    description: 'Central de Auditoria & Dashboard dos Pais para supervisão de rotinas familiares, aprovação de tarefas e gestão de recompensas.',
   },
 };
 

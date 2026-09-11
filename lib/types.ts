@@ -11,10 +11,11 @@ export interface Child {
   badgeNumber: string;
   badgeLabel?: string;
   streakDays: number;
+  role?: 'child' | 'parent';
 }
 
 export type TaskStatus = 'todo' | 'pending' | 'approved' | 'rejected';
-export type TaskCategory = 'Organização' | 'Estudos' | 'Higiene' | 'Convivência' | 'Saúde';
+export type TaskCategory = string;
 
 export interface RoutineTask {
   id: string;
@@ -72,4 +73,24 @@ export interface PointTransaction {
   type: 'earned' | 'spent' | 'penalty';
   points: number;
   category: string;
+}
+
+export interface ParentProfile {
+  fatherName: string;
+  motherName: string;
+  familyName: string;
+  email: string;
+  avatar?: string;
+  fatherAvatar?: string;
+  motherAvatar?: string;
+  role: string;
+}
+
+export interface FamilyAuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: 'parent' | 'co_parent' | 'child';
+  childId?: string;
+  isDemo?: boolean;
 }

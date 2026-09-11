@@ -14,6 +14,11 @@ import NewActivityModal from '@/components/NewActivityModal';
 import ProofPhotoModal from '@/components/ProofPhotoModal';
 import ChildModeModal from '@/components/ChildModeModal';
 import PinSecurityModal from '@/components/PinSecurityModal';
+import AuthModal from '@/components/AuthModal';
+import EditActivityModal from '@/components/EditActivityModal';
+import EditRewardModal from '@/components/EditRewardModal';
+import ManageCategoriesModal from '@/components/ManageCategoriesModal';
+import EditFamilyNameModal from '@/components/EditFamilyNameModal';
 
 import {
   INITIAL_CHILDREN,
@@ -28,18 +33,43 @@ import {
   RewardItem,
   NotificationItem,
   PointTransaction,
+  ParentProfile,
+  FamilyAuthUser,
 } from '@/lib/types';
 import {
   isSupabaseConfigured,
   syncFetchAll,
   syncUpsertTask,
+  syncDeleteTask,
+  syncUpsertReward,
+  syncDeleteReward,
+  syncUpsertFamilyMember,
+  syncDeleteFamilyMember,
+  syncSaveFamilyProfile,
   syncInsertNotification,
   syncUpdateChildBalance,
+  syncUpdateFamilyMemberName,
+  getSupabaseSessionUser,
+  signOutSupabase,
+  subscribeToSupabaseRealtime,
 } from '@/lib/supabase';
 
 export default function RotinasDaFamiliaApp() {
   // Primary State
-  const [childrenData, setChildrenData] = useState<Child[]>(INITIAL_CHILDREN);
+  const [childrenData, setChildrenData] = useState<Child[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rotinas_children');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return INITIAL_CHILDREN;
+  });
   const [tasks, setTasks] = useState<RoutineTask[]>(INITIAL_TASKS);
   const [rewards, setRewards] = useState<RewardItem[]>(INITIAL_REWARDS);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
@@ -50,6 +80,40 @@ export default function RotinasDaFamiliaApp() {
   const [selectedChildFilter, setSelectedChildFilter] = useState<string>('all');
   const [selectedFamily, setSelectedFamily] = useState<string>('Família Silva');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+
+  // Parent Profile (Editable Names for Parents and Family)
+  const [parentProfile, setParentProfile] = useState<ParentProfile>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rotinas_parent_profile');
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return {
+      fatherName: 'Pai Admin',
+      motherName: 'Mãe Admin',
+      familyName: 'Família Silva',
+      email: 'luizaugustomarcondessilveira@gmail.com',
+      role: 'Administrador Chefe',
+    };
+  });
+
+  // Supabase Auth User State
+  const [currentUser, setCurrentUser] = useState<FamilyAuthUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rotinas_auth_user');
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Security PIN
   const [pinCode, setPinCode] = useState<string>('1234');
@@ -122,13 +186,35 @@ export default function RotinasDaFamiliaApp() {
     );
   };
 
-  // Modals
+  // Modals & Active Edit Entities
   const [isNewActivityOpen, setIsNewActivityOpen] = useState<boolean>(false);
+  const [editingTask, setEditingTask] = useState<RoutineTask | null>(null);
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState<boolean>(false);
+  const [editingReward, setEditingReward] = useState<RewardItem | null>(null);
+  const [isEditRewardOpen, setIsEditRewardOpen] = useState<boolean>(false);
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState<boolean>(false);
+  const [isEditFamilyNameOpen, setIsEditFamilyNameOpen] = useState<boolean>(false);
   const [proofPhotoTask, setProofPhotoTask] = useState<RoutineTask | null>(null);
   const [childModeState, setChildModeState] = useState<{
     isOpen: boolean;
     childId: string;
   }>({ isOpen: false, childId: 'lucas' });
+
+  // Categories State
+  const [categories, setCategories] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rotinas_categories');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return ['Organização', 'Estudos', 'Higiene', 'Convivência', 'Saúde'];
+  });
 
   // Toast Notification
   const [toast, setToast] = useState<{
@@ -156,7 +242,7 @@ export default function RotinasDaFamiliaApp() {
     }
   }, [toast.visible]);
 
-  // Synchronize with Supabase if configured
+  // Synchronize with Supabase if configured (Initial fetch)
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
@@ -189,6 +275,346 @@ export default function RotinasDaFamiliaApp() {
       isMounted = false;
     };
   }, []);
+
+  // Realtime Supabase Subscription for multi-device sync
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const unsubscribe = subscribeToSupabaseRealtime(() => {
+      syncFetchAll().then((remoteData) => {
+        if (!remoteData) return;
+        if (remoteData.children && remoteData.children.length > 0) {
+          setChildrenData(remoteData.children);
+        }
+        if (remoteData.tasks && remoteData.tasks.length > 0) {
+          setTasks(remoteData.tasks);
+        }
+        if (remoteData.rewards && remoteData.rewards.length > 0) {
+          setRewards(remoteData.rewards);
+        }
+        if (remoteData.notifications && remoteData.notifications.length > 0) {
+          setNotifications(remoteData.notifications);
+        }
+        if (remoteData.transactions && remoteData.transactions.length > 0) {
+          setTransactions(remoteData.transactions);
+        }
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Check Supabase session on start
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    getSupabaseSessionUser().then((user) => {
+      if (user) {
+        const metadata = user.user_metadata || {};
+        setCurrentUser({
+          id: user.id,
+          email: user.email || '',
+          name: metadata.name || user.email?.split('@')[0] || 'Membro',
+          role: metadata.role || 'parent',
+          childId: metadata.childId,
+          isDemo: false,
+        });
+      }
+    });
+  }, []);
+
+  // Handlers for Profile and Family Name Editing
+  const handleUpdateParentProfile = (newProfile: ParentProfile) => {
+    setParentProfile(newProfile);
+    if (newProfile.familyName) {
+      setSelectedFamily(newProfile.familyName);
+    }
+    try {
+      localStorage.setItem('rotinas_parent_profile', JSON.stringify(newProfile));
+    } catch {
+      // ignore
+    }
+
+    if (isSupabaseConfigured) {
+      syncSaveFamilyProfile(newProfile);
+    }
+  };
+
+  const handleSaveFamilyName = (newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const updatedProfile = { ...parentProfile, familyName: trimmed };
+    setParentProfile(updatedProfile);
+    setSelectedFamily(trimmed);
+    try {
+      localStorage.setItem('rotinas_parent_profile', JSON.stringify(updatedProfile));
+    } catch {
+      // ignore
+    }
+    if (isSupabaseConfigured) {
+      syncSaveFamilyProfile(updatedProfile);
+    }
+    showToast('Nome da Família Atualizado', `Grupo alterado para "${trimmed}".`, 'home');
+  };
+
+  // Handler for Member (Parent / Child) Save & Edit
+  const handleSaveMember = (memberData: {
+    id: string;
+    name: string;
+    avatar: string;
+    age?: string;
+    level?: string;
+    balance?: number;
+    role?: 'child' | 'parent';
+    email?: string;
+  }) => {
+    if (memberData.role === 'parent') {
+      const isFather = memberData.id === 'pai' || memberData.id === 'father';
+      const updatedProfile: ParentProfile = {
+        ...parentProfile,
+        fatherName: isFather ? memberData.name : parentProfile.fatherName,
+        motherName: !isFather ? memberData.name : parentProfile.motherName,
+        ...(isFather ? { fatherAvatar: memberData.avatar } : { motherAvatar: memberData.avatar }),
+        email: memberData.email || parentProfile.email,
+      };
+      setParentProfile(updatedProfile);
+      try {
+        localStorage.setItem('rotinas_parent_profile', JSON.stringify(updatedProfile));
+      } catch {}
+      if (isSupabaseConfigured) {
+        syncSaveFamilyProfile(updatedProfile);
+      }
+      showToast('Perfil de Responsável Salvo', `Dados de ${memberData.name} atualizados no Supabase.`, 'verified_user');
+      return;
+    }
+
+    // It's a child
+    const existingIndex = childrenData.findIndex((c) => c.id === memberData.id);
+    let updatedChildren: Child[];
+    if (existingIndex >= 0) {
+      updatedChildren = childrenData.map((c) =>
+        c.id === memberData.id
+          ? {
+              ...c,
+              name: memberData.name,
+              avatar: memberData.avatar || c.avatar,
+              age: memberData.age || c.age,
+              level: memberData.level || c.level,
+              balance: memberData.balance !== undefined ? memberData.balance : c.balance,
+            }
+          : c
+      );
+    } else {
+      const newChild: Child = {
+        id: memberData.id,
+        name: memberData.name,
+        avatar: memberData.avatar,
+        age: memberData.age || '8 anos',
+        level: memberData.level || 'Nível 1 - Iniciante',
+        balance: memberData.balance ?? 100,
+        accumulated: memberData.balance ?? 100,
+        spent: 0,
+        streakDays: 1,
+        weekPercent: 85,
+        badgeNumber: String(childrenData.length + 1),
+        badgeLabel: 'Novo Membro',
+      };
+      updatedChildren = [...childrenData, newChild];
+    }
+
+    setChildrenData(updatedChildren);
+    try {
+      localStorage.setItem('rotinas_children', JSON.stringify(updatedChildren));
+    } catch {}
+
+    // Update routine tasks & transactions if child name changed
+    setTasks((prev) =>
+      prev.map((t) => (t.childId === memberData.id ? { ...t, childName: memberData.name } : t))
+    );
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.childId === memberData.id ? { ...tx, childName: memberData.name } : tx))
+    );
+
+    // Sync to Supabase
+    if (isSupabaseConfigured) {
+      syncUpsertFamilyMember({
+        id: memberData.id,
+        name: memberData.name,
+        role: 'child',
+        avatarUrl: memberData.avatar,
+        balance: memberData.balance,
+      });
+    }
+
+    showToast('Membro Salvo', `Perfil de ${memberData.name} atualizado no Supabase.`, 'person');
+  };
+
+  // Handler for Member Delete
+  const handleDeleteMember = (memberId: string) => {
+    const member = childrenData.find((c) => c.id === memberId);
+    setChildrenData((prev) => {
+      const filtered = prev.filter((c) => c.id !== memberId);
+      try {
+        localStorage.setItem('rotinas_children', JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
+
+    if (isSupabaseConfigured) {
+      syncDeleteFamilyMember(memberId);
+    }
+
+    showToast('Membro Excluído', `Cadastro de ${member?.name || 'membro'} removido do Supabase.`, 'delete');
+  };
+
+  const handleUpdateChildName = (childId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    // 1. Update children state
+    setChildrenData((prev) => {
+      const updated = prev.map((c) => (c.id === childId ? { ...c, name: trimmed } : c));
+      try {
+        localStorage.setItem('rotinas_children', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    // 2. Update routine tasks with new child name
+    setTasks((prev) =>
+      prev.map((t) => (t.childId === childId ? { ...t, childName: trimmed } : t))
+    );
+
+    // 3. Update transactions with new child name
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.childId === childId ? { ...tx, childName: trimmed } : tx))
+    );
+
+    // 4. Sync to Supabase
+    if (isSupabaseConfigured) {
+      syncUpdateFamilyMemberName(childId, trimmed);
+    }
+  };
+
+  // Handler for Task Edit / Update
+  const handleSaveEditedTask = (updatedTask: RoutineTask) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
+    );
+    if (isSupabaseConfigured) {
+      syncUpsertTask(updatedTask);
+    }
+    showToast('Atividade Atualizada', `"${updatedTask.title}" foi sincronizada com o Supabase.`, 'edit');
+  };
+
+  // Handler for Task Delete
+  const handleDeleteTask = (taskId: string) => {
+    const taskToDelete = tasks.find((t) => t.id === taskId);
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (isSupabaseConfigured) {
+      syncDeleteTask(taskId);
+    }
+    showToast('Atividade Excluída', `"${taskToDelete?.title || 'Atividade'}" foi excluída do Supabase.`, 'delete');
+  };
+
+  // Handler for Reward Edit / Create
+  const handleSaveReward = (reward: RewardItem | Omit<RewardItem, 'id'>) => {
+    const fullReward: RewardItem =
+      'id' in reward && reward.id
+        ? (reward as RewardItem)
+        : {
+            ...(reward as Omit<RewardItem, 'id'>),
+            id: `reward-${Date.now()}`,
+          };
+
+    setRewards((prev) => {
+      const idx = prev.findIndex((r) => r.id === fullReward.id);
+      if (idx >= 0) {
+        return prev.map((r) => (r.id === fullReward.id ? fullReward : r));
+      } else {
+        return [fullReward, ...prev];
+      }
+    });
+    if (isSupabaseConfigured) {
+      syncUpsertReward(fullReward);
+    }
+    showToast('Recompensa Salva', `"${fullReward.title}" sincronizada com o Supabase.`, 'card_giftcard');
+  };
+
+  // Handler for Reward Delete
+  const handleDeleteReward = (rewardId: string) => {
+    const rewardToDelete = rewards.find((r) => r.id === rewardId);
+    setRewards((prev) => prev.filter((r) => r.id !== rewardId));
+    if (isSupabaseConfigured) {
+      syncDeleteReward(rewardId);
+    }
+    showToast('Recompensa Excluída', `"${rewardToDelete?.title || 'Item'}" foi removido do Supabase.`, 'delete');
+  };
+
+  // Handlers for Categories CRUD
+  const handleAddCategory = (name: string) => {
+    if (categories.includes(name)) return;
+    const updated = [...categories, name];
+    setCategories(updated);
+    try {
+      localStorage.setItem('rotinas_categories', JSON.stringify(updated));
+    } catch {}
+    showToast('Categoria Criada', `Categoria "${name}" adicionada ao catálogo.`, 'category');
+  };
+
+  const handleEditCategory = (oldName: string, newName: string) => {
+    const updated = categories.map((c) => (c === oldName ? newName : c));
+    setCategories(updated);
+    try {
+      localStorage.setItem('rotinas_categories', JSON.stringify(updated));
+    } catch {}
+    // Also update tasks that used oldName
+    setTasks((prev) =>
+      prev.map((t) => (t.category === oldName ? { ...t, category: newName } : t))
+    );
+    showToast('Categoria Atualizada', `"${oldName}" alterada para "${newName}".`, 'edit');
+  };
+
+  const handleDeleteCategory = (name: string) => {
+    if (categories.length <= 1) {
+      alert('Você deve manter pelo menos uma categoria no sistema.');
+      return;
+    }
+    const updated = categories.filter((c) => c !== name);
+    setCategories(updated);
+    try {
+      localStorage.setItem('rotinas_categories', JSON.stringify(updated));
+    } catch {}
+    showToast('Categoria Excluída', `Categoria "${name}" foi removida.`, 'delete');
+  };
+
+  // Handlers for Supabase Auth
+  const handleAuthSuccess = (user: FamilyAuthUser) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('rotinas_auth_user', JSON.stringify(user));
+    } catch {
+      // ignore
+    }
+
+    if (user.role === 'child' && user.childId) {
+      setSelectedChildFilter(user.childId);
+      setChildModeState({ isOpen: true, childId: user.childId });
+    }
+  };
+
+  const handleAuthLogout = () => {
+    signOutSupabase();
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('rotinas_auth_user');
+    } catch {
+      // ignore
+    }
+    showToast('Sessão Encerrada', 'Você saiu da sua conta familiar.', 'logout');
+  };
 
   // Handle approving a single task
   const handleApproveTask = (taskId: string, customFeedback?: string, customPoints?: number) => {
@@ -519,6 +945,22 @@ export default function RotinasDaFamiliaApp() {
     setRewards(INITIAL_REWARDS);
     setNotifications(INITIAL_NOTIFICATIONS);
     setTransactions(INITIAL_TRANSACTIONS);
+    const defaultProfile: ParentProfile = {
+      fatherName: 'Pai Admin',
+      motherName: 'Mãe Admin',
+      familyName: 'Família Silva',
+      email: 'luizaugustomarcondessilveira@gmail.com',
+      role: 'Administrador Chefe',
+    };
+    setParentProfile(defaultProfile);
+    setSelectedFamily('Família Silva');
+    try {
+      localStorage.removeItem('rotinas_children');
+      localStorage.removeItem('rotinas_parent_profile');
+      localStorage.removeItem('rotinas_auth_user');
+    } catch {
+      // ignore
+    }
   };
 
   const unreadNotificationsCount = notifications.filter((n) => n.unread).length;
@@ -542,6 +984,9 @@ export default function RotinasDaFamiliaApp() {
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         pendingCount={pendingTasksCount}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        familyName={parentProfile.familyName}
       />
 
       {/* Main Container */}
@@ -561,10 +1006,15 @@ export default function RotinasDaFamiliaApp() {
           }
           selectedFamily={selectedFamily}
           onChangeFamily={setSelectedFamily}
+          onOpenEditFamilyName={() => setIsEditFamilyNameOpen(true)}
           unreadCount={unreadNotificationsCount}
           themeMode={themeMode}
           onThemeChange={handleThemeChange}
           onSelectView={(view) => setCurrentView(view)}
+          parentProfile={parentProfile}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onLogout={handleAuthLogout}
         />
 
         {/* Dynamic Workspace Content */}
@@ -603,15 +1053,28 @@ export default function RotinasDaFamiliaApp() {
                   onOpenPinChangeModal={() =>
                     setPinModalState({ isOpen: true, mode: 'change' })
                   }
+                  onEditTask={(task) => {
+                    setEditingTask(task);
+                    setIsEditTaskOpen(true);
+                  }}
+                  onDeleteTask={handleDeleteTask}
                 />
               )}
 
               {currentView === 'catalogo-de-atividades' && (
                 <ActivitiesCatalog
                   tasks={tasks}
+                  childrenData={childrenData}
+                  categories={categories}
                   onOpenNewActivity={() => setIsNewActivityOpen(true)}
+                  onOpenManageCategories={() => setIsManageCategoriesOpen(true)}
                   selectedChildFilter={selectedChildFilter}
                   onFilterChild={setSelectedChildFilter}
+                  onEditTask={(task) => {
+                    setEditingTask(task);
+                    setIsEditTaskOpen(true);
+                  }}
+                  onDeleteTask={handleDeleteTask}
                 />
               )}
 
@@ -628,14 +1091,12 @@ export default function RotinasDaFamiliaApp() {
                   rewards={rewards}
                   childrenData={childrenData}
                   onDeliverReward={handleDeliverReward}
-                  onAddNewReward={(reward) => {
-                    const newR: RewardItem = {
-                      ...reward,
-                      id: `reward-${Date.now()}`,
-                    };
-                    setRewards((prev) => [newR, ...prev]);
-                    showToast('Recompensa Criada', 'Disponível na loja familiar.', 'card_giftcard');
+                  onAddNewReward={handleSaveReward}
+                  onEditReward={(reward) => {
+                    setEditingReward(reward);
+                    setIsEditRewardOpen(true);
                   }}
+                  onDeleteReward={handleDeleteReward}
                 />
               )}
 
@@ -645,6 +1106,14 @@ export default function RotinasDaFamiliaApp() {
                   onOpenChildMode={(childId) =>
                     setChildModeState({ isOpen: true, childId })
                   }
+                  parentProfile={parentProfile}
+                  currentUser={currentUser}
+                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                  onOpenSettings={() => setCurrentView('configuracoes')}
+                  onUpdateChildName={handleUpdateChildName}
+                  onSaveMember={handleSaveMember}
+                  onDeleteMember={handleDeleteMember}
+                  onSaveFamilyName={handleSaveFamilyName}
                 />
               )}
 
@@ -656,6 +1125,13 @@ export default function RotinasDaFamiliaApp() {
                   onShowToast={showToast}
                   themeMode={themeMode}
                   onThemeChange={handleThemeChange}
+                  parentProfile={parentProfile}
+                  onUpdateParentProfile={handleUpdateParentProfile}
+                  childrenData={childrenData}
+                  onUpdateChildName={handleUpdateChildName}
+                  currentUser={currentUser}
+                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                  onLogout={handleAuthLogout}
                 />
               )}
             </>
@@ -669,6 +1145,51 @@ export default function RotinasDaFamiliaApp() {
         onClose={() => setIsNewActivityOpen(false)}
         childrenData={childrenData}
         onAddTask={handleAddTask}
+      />
+
+      {/* Edit Activity / Task Modal */}
+      <EditActivityModal
+        isOpen={isEditTaskOpen}
+        onClose={() => {
+          setIsEditTaskOpen(false);
+          setEditingTask(null);
+        }}
+        task={editingTask}
+        categories={categories}
+        childrenData={childrenData}
+        onSaveTask={handleSaveEditedTask}
+        onDeleteTask={handleDeleteTask}
+      />
+
+      {/* Edit Reward Modal */}
+      <EditRewardModal
+        isOpen={isEditRewardOpen}
+        onClose={() => {
+          setIsEditRewardOpen(false);
+          setEditingReward(null);
+        }}
+        reward={editingReward}
+        childrenData={childrenData}
+        onSaveReward={handleSaveReward}
+        onDeleteReward={handleDeleteReward}
+      />
+
+      {/* Manage Categories Modal */}
+      <ManageCategoriesModal
+        isOpen={isManageCategoriesOpen}
+        onClose={() => setIsManageCategoriesOpen(false)}
+        categories={categories}
+        onAddCategory={handleAddCategory}
+        onEditCategory={handleEditCategory}
+        onDeleteCategory={handleDeleteCategory}
+      />
+
+      {/* Edit Family Name Modal */}
+      <EditFamilyNameModal
+        isOpen={isEditFamilyNameOpen}
+        onClose={() => setIsEditFamilyNameOpen(false)}
+        currentFamilyName={parentProfile.familyName || 'Família Silva'}
+        onSaveFamilyName={handleSaveFamilyName}
       />
 
       <ProofPhotoModal
@@ -711,6 +1232,17 @@ export default function RotinasDaFamiliaApp() {
           setPinCode(newPin);
           showToast('Novo PIN Salvo!', 'O código foi atualizado.', 'verified');
         }}
+      />
+
+      {/* Supabase Auth Modal for Login / Cadastro */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onAuthSuccess={handleAuthSuccess}
+        onLogout={handleAuthLogout}
+        onShowToast={showToast}
+        childrenData={childrenData}
       />
 
       {/* FLOATING TOAST NOTIFICATION */}

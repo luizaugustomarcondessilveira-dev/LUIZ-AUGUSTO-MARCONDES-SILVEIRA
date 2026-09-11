@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { PARENT_USER } from '@/lib/initial-data';
-import { NotificationItem } from '@/lib/types';
+import { NotificationItem, ParentProfile, FamilyAuthUser } from '@/lib/types';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -12,10 +12,15 @@ interface HeaderProps {
   onMarkNotificationRead: (id: string) => void;
   selectedFamily: string;
   onChangeFamily: (fam: string) => void;
+  onOpenEditFamilyName?: () => void;
   unreadCount: number;
   themeMode?: 'light' | 'dark' | 'system';
   onThemeChange?: (newTheme: 'light' | 'dark' | 'system') => void;
   onSelectView?: (viewId: string) => void;
+  parentProfile?: ParentProfile;
+  currentUser?: FamilyAuthUser | null;
+  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export default function Header({
@@ -26,10 +31,21 @@ export default function Header({
   onMarkNotificationRead,
   selectedFamily,
   onChangeFamily,
+  onOpenEditFamilyName,
   unreadCount,
   themeMode = 'light',
   onThemeChange,
   onSelectView,
+  parentProfile = {
+    fatherName: 'Pai Admin',
+    motherName: 'Mãe Admin',
+    familyName: 'Família Silva',
+    email: 'luizaugustomarcondessilveira@gmail.com',
+    role: 'Administrador Chefe',
+  },
+  currentUser,
+  onOpenAuthModal,
+  onLogout,
 }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFamilyDropdown, setShowFamilyDropdown] = useState(false);
@@ -73,7 +89,7 @@ export default function Header({
         </button>
 
         {/* Family Selector Dropdown */}
-        <div className="relative" ref={famRef}>
+        <div className="relative flex items-center gap-1" ref={famRef}>
           <button
             id="btn-family-selector"
             onClick={() => setShowFamilyDropdown(!showFamilyDropdown)}
@@ -86,20 +102,31 @@ export default function Header({
             </span>
           </button>
 
+          {onOpenEditFamilyName && (
+            <button
+              type="button"
+              onClick={onOpenEditFamilyName}
+              title="Renomear grupo familiar"
+              className="p-1.5 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[17px]">edit</span>
+            </button>
+          )}
+
           {showFamilyDropdown && (
-            <div className="absolute left-0 mt-1.5 w-52 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/30 py-1 z-50 animate-in fade-in zoom-in-95">
+            <div className="absolute left-0 top-full mt-1.5 w-56 bg-surface-container-lowest rounded-xl shadow-lg border border-outline-variant/30 py-1 z-50 animate-in fade-in zoom-in-95">
               <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
                 Selecione o Grupo Familiar
               </div>
               <button
                 onClick={() => {
-                  onChangeFamily('Família Silva');
+                  onChangeFamily(parentProfile.familyName || 'Família Silva');
                   setShowFamilyDropdown(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-on-surface hover:bg-surface-container flex items-center justify-between font-medium"
               >
-                <span>Família Silva</span>
-                {selectedFamily === 'Família Silva' && (
+                <span>{parentProfile.familyName || 'Família Silva'}</span>
+                {selectedFamily === (parentProfile.familyName || 'Família Silva') && (
                   <span className="material-symbols-outlined text-[18px] text-emerald-600">
                     check
                   </span>
@@ -119,15 +146,32 @@ export default function Header({
                   </span>
                 )}
               </button>
+
               <div className="border-t border-outline-variant/20 my-1"></div>
+
+              {onOpenEditFamilyName && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFamilyDropdown(false);
+                    onOpenEditFamilyName();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-surface-container font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">edit</span>
+                  <span>Renomear este grupo familiar</span>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setShowFamilyDropdown(false);
+                  onOpenEditFamilyName?.();
                 }}
-                className="w-full text-left px-3 py-1.5 text-xs text-primary dark:text-primary-fixed hover:bg-surface-container font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="w-full text-left px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[16px]">add_home</span>
-                <span>Adicionar outro grupo familiar</span>
+                <span>Novo grupo familiar</span>
               </button>
             </div>
           )}
@@ -268,16 +312,22 @@ export default function Header({
           <div
             id="user-profile-menu-trigger"
             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            className="flex items-center gap-2 cursor-pointer group select-none p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            className="flex items-center gap-2 cursor-pointer group select-none p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <img
-              src={PARENT_USER.avatar}
-              alt="Pai Admin"
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200 group-hover:ring-amber-400 transition-all"
-            />
+            {currentUser?.role === 'child' ? (
+              <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {currentUser.name.charAt(0)}
+              </div>
+            ) : (
+              <img
+                src={PARENT_USER.avatar}
+                alt={currentUser?.name || parentProfile.fatherName}
+                className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-700 group-hover:ring-amber-400 transition-all"
+              />
+            )}
             <div className="hidden sm:flex flex-col text-left">
-              <span className="font-semibold text-xs text-[#191c1e] leading-tight">
-                {PARENT_USER.name}
+              <span className="font-semibold text-xs text-on-surface leading-tight truncate max-w-[120px]">
+                {currentUser ? currentUser.name : parentProfile.fatherName}
               </span>
               <button
                 type="button"
@@ -285,7 +335,7 @@ export default function Header({
                   e.stopPropagation();
                   onOpenChildMode();
                 }}
-                className="text-[11px] font-medium text-[#855300] hover:underline flex items-center gap-1"
+                className="text-[11px] font-medium text-[#855300] dark:text-[#ffb95f] hover:underline flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-[13px]">child_care</span>
                 <span>Modo Filho</span>
@@ -298,18 +348,66 @@ export default function Header({
 
           {/* Profile Dropdown */}
           {showProfileDropdown && (
-            <div className="absolute right-0 mt-2 w-64 bg-surface-container-lowest rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50 animate-in fade-in zoom-in-95">
+            <div className="absolute right-0 mt-2 w-68 bg-surface-container-lowest rounded-xl shadow-xl border border-outline-variant/30 py-2 z-50 animate-in fade-in zoom-in-95">
               <div className="px-4 py-2 border-b border-outline-variant/20">
-                <div className="font-bold text-sm text-on-surface">{PARENT_USER.name}</div>
-                <div className="text-xs text-on-surface-variant">{PARENT_USER.email}</div>
-                <span className="inline-block mt-1 text-[10px] font-semibold bg-primary/10 text-primary dark:text-primary-fixed px-2 py-0.5 rounded-full">
-                  Administrador Chefe
-                </span>
+                <div className="font-bold text-sm text-on-surface truncate">
+                  {currentUser ? currentUser.name : parentProfile.fatherName}
+                </div>
+                <div className="text-xs text-on-surface-variant truncate">
+                  {currentUser ? currentUser.email : parentProfile.email}
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-semibold bg-primary/10 text-primary dark:text-primary-fixed px-2 py-0.5 rounded-full">
+                    {currentUser
+                      ? currentUser.role === 'parent'
+                        ? 'Pai / Admin'
+                        : currentUser.role === 'co_parent'
+                        ? 'Mãe / Co-Admin'
+                        : 'Filho / Membro'
+                      : 'Administrador da Família'}
+                  </span>
+                  {currentUser?.isDemo && (
+                    <span className="text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded">
+                      Demo
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Account / Profile Quick Actions */}
+              <div className="py-1 border-b border-outline-variant/20">
+                <button
+                  onClick={() => {
+                    onSelectView?.('configuracoes');
+                    setShowProfileDropdown(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-primary text-[18px]">
+                    manage_accounts
+                  </span>
+                  <span>Editar Nomes & Configurações</span>
+                </button>
+
+                {onOpenAuthModal && (
+                  <button
+                    onClick={() => {
+                      onOpenAuthModal();
+                      setShowProfileDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-emerald-600 text-[18px]">
+                      vpn_key
+                    </span>
+                    <span>{currentUser ? 'Trocar Conta / Cadastrar Membro' : 'Login / Cadastrar Conta'}</span>
+                  </button>
+                )}
               </div>
 
               <div className="py-1">
                 <div className="px-3 py-1 text-[11px] font-bold uppercase text-on-surface-variant/70">
-                  Alternar Visão
+                  Alternar Visão Infantil
                 </div>
                 <button
                   onClick={() => {
@@ -321,7 +419,7 @@ export default function Header({
                   <span className="material-symbols-outlined text-amber-500 text-[18px]">
                     face
                   </span>
-                  <span>Ver visão de Lucas (10a)</span>
+                  <span>Ver visão de Lucas</span>
                 </button>
                 <button
                   onClick={() => {
@@ -333,14 +431,29 @@ export default function Header({
                   <span className="material-symbols-outlined text-amber-500 text-[18px]">
                     face_3
                   </span>
-                  <span>Ver visão de Beatriz (7a)</span>
+                  <span>Ver visão de Beatriz</span>
                 </button>
               </div>
 
+              {currentUser && onLogout && (
+                <div className="border-t border-outline-variant/20 pt-1">
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setShowProfileDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">logout</span>
+                    <span>Desconectar Conta</span>
+                  </button>
+                </div>
+              )}
+
               <div className="border-t border-outline-variant/20 pt-1">
-                <div className="px-4 py-1.5 text-xs text-on-surface-variant flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-primary">verified</span>
-                  <span>Rotinas da Família v3.4</span>
+                <div className="px-4 py-1 text-[11px] text-on-surface-variant flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px] text-primary">verified</span>
+                  <span>Rotinas da Família • Supabase Auth</span>
                 </div>
               </div>
             </div>
