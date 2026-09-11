@@ -231,11 +231,11 @@ export default function RotinasDaFamiliaApp() {
     let mounted = true;
     syncFetchAll().then((remoteData) => {
       if (!mounted || !remoteData) return;
-      if (remoteData.children?.length > 0) setChildrenData(remoteData.children);
-      if (remoteData.tasks?.length > 0) setTasks(remoteData.tasks);
-      if (remoteData.rewards?.length > 0) setRewards(remoteData.rewards);
-      if (remoteData.notifications?.length > 0) setNotifications(remoteData.notifications);
-      if (remoteData.transactions?.length > 0) setTransactions(remoteData.transactions);
+      if (remoteData.children && remoteData.children.length > 0) setChildrenData(remoteData.children);
+      if (remoteData.tasks && remoteData.tasks.length > 0) setTasks(remoteData.tasks);
+      if (remoteData.rewards && remoteData.rewards.length > 0) setRewards(remoteData.rewards);
+      if (remoteData.notifications && remoteData.notifications.length > 0) setNotifications(remoteData.notifications);
+      if (remoteData.transactions && remoteData.transactions.length > 0) setTransactions(remoteData.transactions);
       showToast('Supabase Sincronizado', 'Dados carregados com sucesso.', 'cloud_done');
     });
     return () => { mounted = false; };
@@ -247,11 +247,11 @@ export default function RotinasDaFamiliaApp() {
     const unsub = subscribeToSupabaseRealtime(() => {
       syncFetchAll().then((remoteData) => {
         if (!remoteData) return;
-        if (remoteData.children?.length > 0) setChildrenData(remoteData.children);
-        if (remoteData.tasks?.length > 0) setTasks(remoteData.tasks);
-        if (remoteData.rewards?.length > 0) setRewards(remoteData.rewards);
-        if (remoteData.notifications?.length > 0) setNotifications(remoteData.notifications);
-        if (remoteData.transactions?.length > 0) setTransactions(remoteData.transactions);
+        if (remoteData.children && remoteData.children.length > 0)
+        if (remoteData.tasks && remoteData.tasks.length > 0) setTasks(remoteData.tasks);
+        if (remoteData.rewards && remoteData.rewards.length > 0) setRewards(remoteData.rewards);
+        if (remoteData.notifications && remoteData.notifications.length > 0) setNotifications(remoteData.notifications);
+        if (remoteData.transactions && remoteData.transactions.length > 0) setTransactions(remoteData.transactions);
       });
     });
     return () => unsub();
