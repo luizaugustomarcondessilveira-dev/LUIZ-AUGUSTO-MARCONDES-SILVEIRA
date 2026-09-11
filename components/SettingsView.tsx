@@ -20,6 +20,7 @@ interface SettingsViewProps {
   currentUser?: FamilyAuthUser | null;
   onOpenAuthModal?: () => void;
   onLogout?: () => void;
+  onLogoutToLogin?: () => void;
 }
 
 export default function SettingsView({
@@ -42,6 +43,9 @@ export default function SettingsView({
   currentUser,
   onOpenAuthModal,
   onLogout,
+}: SettingsViewProps) {
+  onLogout,
+  onLogoutToLogin,
 }: SettingsViewProps) {
   const [pin, setPin] = useState(currentPin);
   const [delayTolerance, setDelayTolerance] = useState('15');
@@ -642,28 +646,44 @@ export default function SettingsView({
           )}
         </div>
 
-        {/* Save button & Reset bar */}
-        <div className="md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/30 shadow-xs">
-          <button
-            type="button"
-            onClick={() => {
-              onResetData();
-              onShowToast('Dados Restaurados', 'As tarefas e saldos foram reiniciados.', 'restart_alt');
-            }}
-            className="text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 flex items-center gap-1.5 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-            <span>Restaurar Dados de Exemplo</span>
-          </button>
+        {/* Ações e Salvar */}
+        <div className="md:col-span-2 flex flex-col gap-3 bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/30 shadow-xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Tem certeza que deseja zerar todos os dados? Esta ação não pode ser desfeita.')) {
+                  onResetData();
+                  onShowToast('Dados Zerados', 'Todos os dados foram restaurados para o padrão.', 'restart_alt');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40 hover:bg-red-100 dark:hover:bg-red-950/60 font-bold text-xs transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">delete_forever</span>
+              <span>Zerar Todos os Dados</span>
+            </button>
 
-          <button
-            type="submit"
-            className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
-          >
-            Salvar Todas as Alterações
-          </button>
+            {onLogoutToLogin && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onLogout) onLogout();
+                  onLogoutToLogin();
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container text-on-surface-variant border border-outline-variant/30 font-bold text-xs transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                <span>Sair para Tela de Login</span>
+              </button>
+            )}
+          </div>
+
+          <div className="border-t border-outline-variant/20 pt-3 flex justify-end">
+            <button
+              type="submit"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 cursor-pointer"
+            >
+              Salvar Todas as Alterações
+            </button>
+          </div>
         </div>
-      </form>
-    </div>
-  );
-}
